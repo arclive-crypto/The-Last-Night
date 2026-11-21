@@ -1,0 +1,50 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>THE LAST LIGHT</title><style>
+html,body{margin:0;overflow:hidden;background:#050608;color:#eee;font-family:Arial}canvas{display:block}#hud{position:fixed;top:12px;left:12px;background:#000b;border:1px solid #555;border-radius:8px;padding:12px;line-height:1.5;z-index:2}#message{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#000c;padding:12px;border-radius:8px;z-index:2}#cover{position:fixed;inset:0;z-index:5;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;background:radial-gradient(#19232d,#020305);padding:20px}h1{font-size:clamp(36px,7vw,76px);letter-spacing:5px;text-shadow:0 0 20px #7da0bd}button{padding:14px 24px;font-size:18px;margin:10px;cursor:pointer;border:0;border-radius:7px}
+</style></head><body><div id="hud">🔦 <span id="bat">100</span>% | Batteries: <span id="bp">4</span><br>🪙 Coins: <span id="score">0</span>/12<br>Floor: <span id="fl">Ground</span><small><br>WASD · Mouse · Shift · F · E</small></div><div id="message">Find 12 coins and escape.</div><div id="cover"><h1>THE LAST LIGHT</h1><p>Explore the house. Find 12 coins. Escape.</p><p>WASD movement · Mouse look · Shift run · F flashlight · E collect</p><button id="go">START GAME</button></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x06070a);scene.fog=new THREE.Fog(0x06070a,12,48);
+const camera=new THREE.PerspectiveCamera(74,innerWidth/innerHeight,.1,100);camera.position.set(0,1.65,9);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.shadowMap.enabled=true;document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0x9aa8b9,0x171219,.55),new THREE.AmbientLight(0x34343a,.35));
+const M={floor:new THREE.MeshStandardMaterial({color:0x39373c}),wall:new THREE.MeshStandardMaterial({color:0x4a4850}),dark:new THREE.MeshStandardMaterial({color:0x19191e}),wood:new THREE.MeshStandardMaterial({color:0x554034}),coin:new THREE.MeshStandardMaterial({color:0xffd34e,metalness:.45,emissive:0x543000}),battery:new THREE.MeshStandardMaterial({color:0x45cf79,emissive:0x183a20}),ghost:new THREE.MeshStandardMaterial({color:0xb7c6d5,transparent:true,opacity:.8,emissive:0x26394d})};
+const solids=[];function box(x,y,z,w,h,d,mat,collision=true){let o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);o.position.set(x,y,z);scene.add(o);if(collision)solids.push({x,z,w,d});return o}
+const levels=[-4,0,4];for(let y of levels){box(0,y-.12,0,24,.24,24,M.floor,false);box(0,y+3,0,24,.15,24,M.dark,false);box(-12,y+1.5,0,.25,3,24,M.wall);box(12,y+1.5,0,.25,3,24,M.wall);box(0,y+1.5,-12,24,3,.25,M.wall);
+ // front wall has entrance gap in center
+ box(-8,y+1.5,12,8,3,.25,M.wall);box(8,y+1.5,12,8,3,.25,M.wall);
+ // interior dividers with door-sized gaps
+ box(-4,y+1.5,0,.22,3,8,M.wall);box(-4,y+1.5,-8,.22,3,4,M.wall);
+ box(4,y+1.5,0,.22,3,8,M.wall);box(4,y+1.5,-8,.22,3,4,M.wall);
+ box(0,y+1.5,-3,8,3,.22,M.wall);
+}
+// stairs: separate visible treads, no large ramp slab. 10 step sequence, each tread occupies the staircase path.
+function stairs(x,zStart,lowY,highY,upwardZ){const steps=10;for(let i=0;i<steps;i++){let t=(i+.5)/steps;let y=lowY+(highY-lowY)*t;let z=zStart+(upwardZ*(i+.5));box(x,y,z,2.5,.24,.72,M.wood,false);}}
+stairs(8,9.6,0,4,-.8); // ground to upper, ascending as z decreases
+stairs(8,-9.6,-4,0,.8); // basement to ground, ascending as z increases
+// rail posts and simple rails
+for(let stair of [{z:6,base:0},{z:-6,base:-4}]){for(let side of [-1,1]){let rail=box(8+side*1.5,stair.base+2,stair.z, .12,3,8,M.wood,false);rail.rotation.x=side===0?0:0;}}
+ // decorative room furnishings
+for(let y of levels){box(-8,y+.45,-7,2.2,.9,2,M.wood,false);box(7,y+.4,7,2,.8,2,M.wood,false);box(-8,y+.5,3,1.5,1,1.5,M.wood,false);}
+const coinMeshes=[];const coinLoc=[[-9,0,-8],[9,0,-8],[-9,0,8],[0,0,-8],[0,0,8],[-8,4,0],[8,4,-8],[0,4,8],[-8,-4,-8],[8,-4,0],[0,-4,8],[-9,4,8]];
+for(let [x,y,z] of coinLoc){let c=new THREE.Mesh(new THREE.TorusGeometry(.27,.08,10,20),M.coin);c.rotation.x=Math.PI/2;c.position.set(x,y+.65,z);scene.add(c);coinMeshes.push(c)}
+const batteries=[];for(let [x,y,z] of [[-8,0,2],[8,4,0],[-8,-4,2],[0,4,-8]]){let b=box(x,y+.45,z,.35,.55,.3,M.battery,false);batteries.push(b)}
+// custom recognizable ghost (robe, head, arms, eyes)
+const ghost=new THREE.Group();let robe=new THREE.Mesh(new THREE.ConeGeometry(.65,2.4,12),M.ghost);robe.position.y=1.2;ghost.add(robe);let head=new THREE.Mesh(new THREE.SphereGeometry(.4,18,14),M.ghost);head.position.y=2.35;ghost.add(head);for(let s of [-1,1]){let arm=new THREE.Mesh(new THREE.CapsuleGeometry(.16,.65,5,8),M.ghost);arm.position.set(s*.62,1.45,0);arm.rotation.z=s*.4;ghost.add(arm);let eye=new THREE.Mesh(new THREE.SphereGeometry(.1),new THREE.MeshBasicMaterial({color:0xff2020}));eye.position.set(s*.16,2.38,-.33);ghost.add(eye)}ghost.position.set(-2,0,-4);scene.add(ghost);
+const spot=new THREE.SpotLight(0xeaf4ff,16,40,Math.PI/3,.42,1.3),fill=new THREE.PointLight(0xd6e8ff,2.4,9);scene.add(spot,spot.target,fill);
+let yaw=0,pitch=0,level=1,started=false,light=true,charge=100,batteryCount=4,score=0;const keys={};let last=performance.now();const msg=document.querySelector('#message');function say(t){msg.textContent=t;clearTimeout(window.timer);window.timer=setTimeout(()=>msg.style.display='none',2600)}
+function collision(x,z){let r=.38;return solids.some(a=>x>a.x-a.w/2-r&&x<a.x+a.w/2+r&&z>a.z-a.d/2-r&&z<a.z+a.d/2+r)}
+function updateStairs(){// height interpolation from stair zones; other areas retain floor height
+ if(camera.position.x>6&&camera.position.x<10&&camera.position.z<10&&camera.position.z>2){let t=(10-camera.position.z)/8;camera.position.y=1.65+4*Math.max(0,Math.min(1,t));level=2;}
+ else if(camera.position.x>6&&camera.position.x<10&&camera.position.z<-2&&camera.position.z>-10){let t=(camera.position.z+10)/8;camera.position.y=-2.35+4*Math.max(0,Math.min(1,t));level=t>.5?1:0;}
+ else {level=Math.round((camera.position.y+2.35)/4);level=Math.max(0,Math.min(2,level));camera.position.y=levels[level]+1.65;}}
+function toggle(){light=!light;spot.visible=fill.visible=light}
+function interact(){for(let i=coinMeshes.length-1;i>=0;i--)if(coinMeshes[i]&&coinMeshes[i].position.distanceTo(camera.position)<2.1){scene.remove(coinMeshes[i]);coinMeshes[i]=null;score++;document.querySelector('#score').textContent=score;say('Coin '+score+'/12 collected');return}
+for(let i=batteries.length-1;i>=0;i--)if(batteries[i]&&batteries[i].position.distanceTo(camera.position)<2){scene.remove(batteries[i]);batteries[i]=null;batteryCount++;charge=Math.min(100,charge+30);say('Battery collected');return}
+if(camera.position.distanceTo(new THREE.Vector3(0,1.65,11.5))<3){if(score===12){document.querySelector('#cover').style.display='flex';document.querySelector('#cover h1').textContent='YOU ESCAPED';document.querySelector('#cover p').textContent='You found all 12 coins and escaped.';started=false}else say('Exit locked. Coins: '+score+'/12');return}say('Move closer to an item and press E.')}
+document.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key.toLowerCase()==='f')toggle();if(e.key.toLowerCase()==='e')interact()});document.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);renderer.domElement.addEventListener('click',()=>{if(started)renderer.domElement.requestPointerLock()});document.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement){yaw-=e.movementX*.0022;pitch=Math.max(-1.1,Math.min(1.1,pitch-e.movementY*.002))}});
+document.querySelector('#go').onclick=()=>{started=true;document.querySelector('#cover').style.display='none';say('Spawn: front entrance. Collect the coins.')};
+function animate(){requestAnimationFrame(animate);let now=performance.now(),dt=Math.min((now-last)/1000,.05);last=now;if(started){let f=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)),r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw)),v=new THREE.Vector3();if(keys.w)v.add(f);if(keys.s)v.sub(f);if(keys.d)v.add(r);if(keys.a)v.sub(r);if(v.length())v.normalize().multiplyScalar((keys.shift?5.2:3.2)*dt);let nx=camera.position.x+v.x,nz=camera.position.z+v.z;if(!collision(nx,camera.position.z))camera.position.x=nx;if(!collision(camera.position.x,nz))camera.position.z=nz;updateStairs();camera.rotation.order='YXZ';camera.rotation.set(pitch,yaw,0);spot.position.copy(camera.position);spot.target.position.copy(camera.position).add(f.multiplyScalar(12));fill.position.copy(camera.position);
+if(light){charge-=dt*.18;if(charge<=0){charge=0;toggle();say('Battery drained!')}}document.querySelector('#bat').textContent=Math.floor(charge);document.querySelector('#bp').textContent=batteryCount;document.querySelector('#fl').textContent=['Basement','Ground','Upper'][level];
+let d=ghost.position.distanceTo(camera.position);if(d<18){let toward=new THREE.Vector3(camera.position.x-ghost.position.x,0,camera.position.z-ghost.position.z).normalize();ghost.position.add(toward.multiplyScalar(dt*1.15));}else{ghost.position.x=Math.sin(now*.0004)*8;ghost.position.z=Math.cos(now*.0004)*8;}ghost.position.y=levels[level];if(d<1.4&&Math.abs(camera.position.y-ghost.position.y)<3){started=false;document.querySelector('#cover').style.display='flex';document.querySelector('#cover h1').textContent='GAME OVER';document.querySelector('#cover p').textContent='The ghost caught you.'}}
+renderer.render(scene,camera)}animate();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script></body></html>
